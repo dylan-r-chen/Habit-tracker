@@ -365,26 +365,18 @@ function getWeekCompletionRate(habits, completions, weekStart) {
   const days = getWeekDays(weekStart);
   const activeHabits = habits.filter(h => !h.paused);
   if (!activeHabits.length) return 0;
-  const goalHabits = activeHabits.filter(h => h.goal);
-  if (!goalHabits.length) {
-    let total = 0,
-      done = 0;
-    activeHabits.forEach(h => {
-      if (h.freq === "daily") {
-        total += 7;
-        done += days.filter(d => completions[h.id]?.[dateKey(d)]).length;
-      } else {
-        total++;
-        if (days.some(d => completions[h.id]?.[dateKey(d)])) done++;
-      }
-    });
-    return total === 0 ? 0 : Math.round(done / total * 100);
-  }
-  const pcts = goalHabits.map(h => {
+  // Each habit contributes a 0-100 score; over-completion on one habit
+  // never masks a shortfall on another.
+  const pcts = activeHabits.map(h => {
     const count = days.filter(d => completions[h.id]?.[dateKey(d)]).length;
-    if (h.goal.period === "week") return Math.min(count / h.goal.target, 2) * 100;
-    if (h.goal.period === "month") return Math.min(count / (h.goal.target / 4.33), 2) * 100;
-    return Math.min(count / (h.goal.target / 52), 2) * 100;
+    if (h.goal) {
+      if (h.goal.period === "week") return Math.min(count / h.goal.target, 1) * 100;
+      if (h.goal.period === "month") return Math.min(count / (h.goal.target / 4.33), 1) * 100;
+      return Math.min(count / (h.goal.target / 52), 1) * 100;
+    }
+    // No goal: daily habits use 7-day target, weekly habits need 1 completion
+    if (h.freq === "daily") return Math.min(count / 7, 1) * 100;
+    return days.some(d => completions[h.id]?.[dateKey(d)]) ? 100 : 0;
   });
   return Math.round(pcts.reduce((a, b) => a + b, 0) / pcts.length);
 }
