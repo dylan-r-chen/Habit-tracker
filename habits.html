@@ -1636,7 +1636,37 @@ function WeeklyReview(_ref7) {
       const rs = days.map(d => ratings[habit.id]?.[dateKey(d)] || 0).filter(r => r > 0);
       return rs.length ? (rs.reduce((a, b) => a + b, 0) / rs.length).toFixed(1) : 0;
     })();
-    const goalProgress = habit.goal ? getGoalProgress(habit.id, completions, habit.goal) : null;
+    // Calculate goal progress scoped to the selected week, not the current rolling period
+    const goalProgress = (() => {
+      if (!habit.goal) return null;
+      const count = days.filter(d => completions[habit.id]?.[dateKey(d)]).length;
+      const goal = habit.goal;
+      let target, periodLabel;
+      if (goal.period === "week") {
+        target = goal.target;
+        periodLabel = "this week";
+      } else if (goal.period === "month") {
+        // pro-rate monthly target to one week
+        target = Math.round(goal.target / 4.33);
+        periodLabel = "est. weekly";
+      } else {
+        // pro-rate yearly target to one week
+        target = Math.round(goal.target / 52);
+        periodLabel = "est. weekly";
+      }
+      if (target === 0) return null;
+      const pct = Math.min(count / target, 1);
+      const now = new Date();
+      const isSelected = weekStart.getTime() === getWeekStart(now).getTime();
+      // onTrack: only meaningful for current week
+      let onTrack = true;
+      if (isSelected) {
+        const dow = now.getDay() === 0 ? 7 : now.getDay();
+        const expected = Math.floor(dow / 7 * target);
+        onTrack = count >= expected;
+      }
+      return { count, target, pct, onTrack, periodLabel };
+    })();
     const hasAnyNote = days.some(d => notes[habit.id]?.[dateKey(d)]);
     return /*#__PURE__*/React.createElement("div", {
       key: habit.id,
@@ -3195,7 +3225,37 @@ function SortableHabitList(_ref12) {
     const weekCount = getWeeklyCount(habit.id, completions);
     const popping = poppedId === habit.id;
     const isDragging = dragging === realIdx;
-    const goalProgress = habit.goal ? getGoalProgress(habit.id, completions, habit.goal) : null;
+    // Calculate goal progress scoped to the selected week, not the current rolling period
+    const goalProgress = (() => {
+      if (!habit.goal) return null;
+      const count = days.filter(d => completions[habit.id]?.[dateKey(d)]).length;
+      const goal = habit.goal;
+      let target, periodLabel;
+      if (goal.period === "week") {
+        target = goal.target;
+        periodLabel = "this week";
+      } else if (goal.period === "month") {
+        // pro-rate monthly target to one week
+        target = Math.round(goal.target / 4.33);
+        periodLabel = "est. weekly";
+      } else {
+        // pro-rate yearly target to one week
+        target = Math.round(goal.target / 52);
+        periodLabel = "est. weekly";
+      }
+      if (target === 0) return null;
+      const pct = Math.min(count / target, 1);
+      const now = new Date();
+      const isSelected = weekStart.getTime() === getWeekStart(now).getTime();
+      // onTrack: only meaningful for current week
+      let onTrack = true;
+      if (isSelected) {
+        const dow = now.getDay() === 0 ? 7 : now.getDay();
+        const expected = Math.floor(dow / 7 * target);
+        onTrack = count >= expected;
+      }
+      return { count, target, pct, onTrack, periodLabel };
+    })();
     return /*#__PURE__*/React.createElement("div", {
       key: habit.id,
       style: {
