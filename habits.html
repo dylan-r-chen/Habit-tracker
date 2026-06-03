@@ -3212,24 +3212,7 @@ function SortableHabitList(_ref12) {
     const weekCount = getWeeklyCount(habit.id, completions);
     const popping = poppedId === habit.id;
     const isDragging = dragging === realIdx;
-    const goalProgress = (() => {
-      if (!habit.goal) return null;
-      const count = days.filter(d => completions[habit.id]?.[dateKey(d)]).length;
-      const goal = habit.goal;
-      let target, periodLabel;
-      if (goal.period === "week") { target = goal.target; periodLabel = "this week"; }
-      else if (goal.period === "month") { target = Math.round(goal.target / 4.33); periodLabel = "est. weekly"; }
-      else { target = Math.round(goal.target / 52); periodLabel = "est. weekly"; }
-      if (!target) return null;
-      const pct = Math.min(count / target, 1);
-      const isCurrentWeek = weekStart.getTime() === getWeekStart(now).getTime();
-      let onTrack = true;
-      if (isCurrentWeek) {
-        const dow = now.getDay() === 0 ? 7 : now.getDay();
-        onTrack = count >= Math.floor(dow / 7 * target);
-      }
-      return { count, target, pct, onTrack, periodLabel };
-    })();
+    const goalProgress = habit.goal ? getGoalProgress(habit.id, completions, habit.goal) : null;
     return /*#__PURE__*/React.createElement("div", {
       key: habit.id,
       style: {
@@ -3844,18 +3827,7 @@ function HabitTracker() {
 
   if (view === "settings") {
     const handleExport = () => {
-      try {
-        const raw = localStorage.getItem(STORAGE_KEY);
-        if (!raw) { alert("No data to export."); return; }
-        const d = new Date();
-        const stamp = d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0");
-        const blob = new Blob([raw], { type: "application/json" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url; a.download = "habits-backup-" + stamp + ".json";
-        document.body.appendChild(a); a.click();
-        document.body.removeChild(a); URL.revokeObjectURL(url);
-      } catch(e) { alert("Export failed: " + e.message); }
+      exportJSON(state);
     };
     const handleImport = () => {
       const input = document.createElement("input");
@@ -4260,34 +4232,7 @@ function HabitTracker() {
     strokeWidth: "1.5",
     strokeLinecap: "round",
     strokeLinejoin: "round"
-  })), "Export CSV"), /*#__PURE__*/React.createElement("button", {
-    onClick: () => exportJSON(state),
-    style: {
-      display: "flex",
-      alignItems: "center",
-      gap: 6,
-      fontSize: 13,
-      fontFamily: "sans-serif",
-      color: "#8B7355",
-      background: "rgba(139,115,85,0.08)",
-      border: "1px solid rgba(139,115,85,0.2)",
-      borderRadius: 20,
-      padding: "8px 16px",
-      cursor: "pointer",
-      WebkitTapHighlightColor: "transparent"
-    }
-  }, /*#__PURE__*/React.createElement("svg", {
-    width: "14",
-    height: "14",
-    viewBox: "0 0 14 14",
-    fill: "none"
-  }, /*#__PURE__*/React.createElement("path", {
-    d: "M7 1v8M4 6l3 3 3-3M2 11h10",
-    stroke: "#8B7355",
-    strokeWidth: "1.5",
-    strokeLinecap: "round",
-    strokeLinejoin: "round"
-  })), "Backup JSON")), sheet && /*#__PURE__*/React.createElement(HabitSheet, {
+  })), "Export CSV")), sheet && /*#__PURE__*/React.createElement(HabitSheet, {
     habit: sheet?.id ? sheet : null,
     onSave: (habit, pauseEnabled, pauseNote) => {
       const wasPaused = !!sheet?.paused;
