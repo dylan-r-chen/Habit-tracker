@@ -368,7 +368,7 @@ function getWeekCompletionRate(habits, completions, weekStart) {
   var days = getWeekDays(weekStart);
   var activeHabits = habits.filter(function(h) { return !h.paused; });
   if (!activeHabits.length) return 0;
-  // Each habit contributes a 0-100 score; over-completion on one never masks a shortfall on another.
+  // Each habit contributes 0-100; over-completion on one never masks a shortfall on another.
   var pcts = activeHabits.map(function(h) {
     var count = days.filter(function(d) { return completions[h.id] && completions[h.id][dateKey(d)]; }).length;
     if (h.goal) {
@@ -1636,34 +1636,21 @@ function WeeklyReview(_ref7) {
       const rs = days.map(d => ratings[habit.id]?.[dateKey(d)] || 0).filter(r => r > 0);
       return rs.length ? (rs.reduce((a, b) => a + b, 0) / rs.length).toFixed(1) : 0;
     })();
-    // Calculate goal progress scoped to the selected week, not the current rolling period
     const goalProgress = (() => {
       if (!habit.goal) return null;
       const count = days.filter(d => completions[habit.id]?.[dateKey(d)]).length;
       const goal = habit.goal;
       let target, periodLabel;
-      if (goal.period === "week") {
-        target = goal.target;
-        periodLabel = "this week";
-      } else if (goal.period === "month") {
-        // pro-rate monthly target to one week
-        target = Math.round(goal.target / 4.33);
-        periodLabel = "est. weekly";
-      } else {
-        // pro-rate yearly target to one week
-        target = Math.round(goal.target / 52);
-        periodLabel = "est. weekly";
-      }
-      if (target === 0) return null;
+      if (goal.period === "week") { target = goal.target; periodLabel = "this week"; }
+      else if (goal.period === "month") { target = Math.round(goal.target / 4.33); periodLabel = "est. weekly"; }
+      else { target = Math.round(goal.target / 52); periodLabel = "est. weekly"; }
+      if (!target) return null;
       const pct = Math.min(count / target, 1);
-      const now = new Date();
-      const isSelected = weekStart.getTime() === getWeekStart(now).getTime();
-      // onTrack: only meaningful for current week
+      const isCurrentWeek = weekStart.getTime() === getWeekStart(now).getTime();
       let onTrack = true;
-      if (isSelected) {
+      if (isCurrentWeek) {
         const dow = now.getDay() === 0 ? 7 : now.getDay();
-        const expected = Math.floor(dow / 7 * target);
-        onTrack = count >= expected;
+        onTrack = count >= Math.floor(dow / 7 * target);
       }
       return { count, target, pct, onTrack, periodLabel };
     })();
@@ -3225,34 +3212,21 @@ function SortableHabitList(_ref12) {
     const weekCount = getWeeklyCount(habit.id, completions);
     const popping = poppedId === habit.id;
     const isDragging = dragging === realIdx;
-    // Calculate goal progress scoped to the selected week, not the current rolling period
     const goalProgress = (() => {
       if (!habit.goal) return null;
       const count = days.filter(d => completions[habit.id]?.[dateKey(d)]).length;
       const goal = habit.goal;
       let target, periodLabel;
-      if (goal.period === "week") {
-        target = goal.target;
-        periodLabel = "this week";
-      } else if (goal.period === "month") {
-        // pro-rate monthly target to one week
-        target = Math.round(goal.target / 4.33);
-        periodLabel = "est. weekly";
-      } else {
-        // pro-rate yearly target to one week
-        target = Math.round(goal.target / 52);
-        periodLabel = "est. weekly";
-      }
-      if (target === 0) return null;
+      if (goal.period === "week") { target = goal.target; periodLabel = "this week"; }
+      else if (goal.period === "month") { target = Math.round(goal.target / 4.33); periodLabel = "est. weekly"; }
+      else { target = Math.round(goal.target / 52); periodLabel = "est. weekly"; }
+      if (!target) return null;
       const pct = Math.min(count / target, 1);
-      const now = new Date();
-      const isSelected = weekStart.getTime() === getWeekStart(now).getTime();
-      // onTrack: only meaningful for current week
+      const isCurrentWeek = weekStart.getTime() === getWeekStart(now).getTime();
       let onTrack = true;
-      if (isSelected) {
+      if (isCurrentWeek) {
         const dow = now.getDay() === 0 ? 7 : now.getDay();
-        const expected = Math.floor(dow / 7 * target);
-        onTrack = count >= expected;
+        onTrack = count >= Math.floor(dow / 7 * target);
       }
       return { count, target, pct, onTrack, periodLabel };
     })();
@@ -3868,6 +3842,76 @@ function HabitTracker() {
     });
   }
 
+  if (view === "settings") {
+    const handleExport = () => {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) { alert("No data to export."); return; }
+        const d = new Date();
+        const stamp = d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0");
+        const blob = new Blob([raw], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url; a.download = "habits-backup-" + stamp + ".json";
+        document.body.appendChild(a); a.click();
+        document.body.removeChild(a); URL.revokeObjectURL(url);
+      } catch(e) { alert("Export failed: " + e.message); }
+    };
+    const handleImport = () => {
+      const input = document.createElement("input");
+      input.type = "file"; input.accept = ".json,application/json";
+      input.onchange = (e) => {
+        const file = e.target.files[0]; if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          try {
+            const parsed = JSON.parse(ev.target.result);
+            if (!parsed.habits || !Array.isArray(parsed.habits)) { alert("Not a valid habits backup file."); return; }
+            if (!window.confirm("Replace all current data with this backup?")) return;
+            localStorage.setItem(STORAGE_KEY, ev.target.result);
+            window.location.reload();
+          } catch(e) { alert("Import failed: " + e.message); }
+        };
+        reader.readAsText(file);
+      };
+      document.body.appendChild(input); input.click(); document.body.removeChild(input);
+    };
+    return /*#__PURE__*/React.createElement("div", { style: S.root },
+      /*#__PURE__*/React.createElement("div", { style: S.header },
+        /*#__PURE__*/React.createElement("button", { style: S.iconBtn, onClick: () => setView("main"), "aria-label": "Back" },
+          /*#__PURE__*/React.createElement("svg", { width: "20", height: "20", viewBox: "0 0 20 20", fill: "none" },
+            /*#__PURE__*/React.createElement("path", { d: "M13 4L7 10L13 16", stroke: "#6B6259", strokeWidth: "1.5", strokeLinecap: "round", strokeLinejoin: "round" }))),
+        /*#__PURE__*/React.createElement("div", { style: { flex: 1, textAlign: "center" } },
+          /*#__PURE__*/React.createElement("div", { style: { fontSize: 13, color: "#9E9184", fontFamily: "sans-serif", letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 500 } }, "Settings")),
+        /*#__PURE__*/React.createElement("div", { style: { width: 44 } })),
+      /*#__PURE__*/React.createElement("div", { style: { padding: "32px 24px", display: "flex", flexDirection: "column", gap: 12 } },
+        /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, fontFamily: "sans-serif", color: "#9E9184", letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500, marginBottom: 4 } }, "Data"),
+        /*#__PURE__*/React.createElement("button", {
+          onClick: handleExport,
+          style: { width: "100%", padding: "16px 20px", background: "#F0EBE3", border: "none", borderRadius: 14, textAlign: "left", cursor: "pointer", display: "flex", alignItems: "center", gap: 14, WebkitTapHighlightColor: "transparent" }
+        },
+          /*#__PURE__*/React.createElement("div", { style: { width: 36, height: 36, borderRadius: 10, background: "#8B7355", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 } },
+            /*#__PURE__*/React.createElement("svg", { width: "18", height: "18", viewBox: "0 0 18 18", fill: "none" },
+              /*#__PURE__*/React.createElement("path", { d: "M9 2v9M9 11l-3-3M9 11l3-3M3 13v1a2 2 0 002 2h8a2 2 0 002-2v-1", stroke: "white", strokeWidth: "1.5", strokeLinecap: "round", strokeLinejoin: "round" }))),
+          /*#__PURE__*/React.createElement("div", null,
+            /*#__PURE__*/React.createElement("div", { style: { fontSize: 15, color: "#2C2923", marginBottom: 2 } }, "Export Backup"),
+            /*#__PURE__*/React.createElement("div", { style: { fontSize: 12, color: "#9E9184", fontFamily: "sans-serif" } }, "Save all habits & history as a JSON file"))),
+        /*#__PURE__*/React.createElement("button", {
+          onClick: handleImport,
+          style: { width: "100%", padding: "16px 20px", background: "#F0EBE3", border: "none", borderRadius: 14, textAlign: "left", cursor: "pointer", display: "flex", alignItems: "center", gap: 14, WebkitTapHighlightColor: "transparent" }
+        },
+          /*#__PURE__*/React.createElement("div", { style: { width: 36, height: 36, borderRadius: 10, background: "#5C6B8A", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 } },
+            /*#__PURE__*/React.createElement("svg", { width: "18", height: "18", viewBox: "0 0 18 18", fill: "none" },
+              /*#__PURE__*/React.createElement("path", { d: "M9 11V2M9 2L6 5M9 2l3 3M3 13v1a2 2 0 002 2h8a2 2 0 002-2v-1", stroke: "white", strokeWidth: "1.5", strokeLinecap: "round", strokeLinejoin: "round" }))),
+          /*#__PURE__*/React.createElement("div", null,
+            /*#__PURE__*/React.createElement("div", { style: { fontSize: 15, color: "#2C2923", marginBottom: 2 } }, "Restore from Backup"),
+            /*#__PURE__*/React.createElement("div", { style: { fontSize: 12, color: "#9E9184", fontFamily: "sans-serif" } }, "Load a previously exported JSON file"))),
+        /*#__PURE__*/React.createElement("div", { style: { marginTop: 24, padding: "14px 16px", background: "#F0EBE3", borderRadius: 12 } },
+          /*#__PURE__*/React.createElement("div", { style: { fontSize: 12, color: "#9E9184", fontFamily: "sans-serif", lineHeight: 1.6 } },
+            "⚠️ iOS tip: Export regularly and save to Files app. Data stored in home screen bookmarks can be lost if the bookmark is deleted."))),
+      /*#__PURE__*/React.createElement("style", null, "* { -webkit-tap-highlight-color: transparent; box-sizing: border-box; } body { margin: 0; background: #F7F4EF; }"));
+  }
+
   // ── Widget ─────────────────────────────────────────────────────────────────
   if (view === "widget") {
     const pct = state.habits.length === 0 ? 0 : getTodayDone(state.habits, state.completions) / state.habits.length * 100;
@@ -4068,6 +4112,17 @@ function HabitTracker() {
     rx: "2",
     stroke: "#6B6259",
     strokeWidth: "1.5"
+  }))), /*#__PURE__*/React.createElement("button", {
+    style: S.iconBtn,
+    onClick: () => setView("settings"),
+    "aria-label": "Settings"
+  }, /*#__PURE__*/React.createElement("svg", {
+    width: "20", height: "20", viewBox: "0 0 20 20", fill: "none"
+  }, /*#__PURE__*/React.createElement("circle", {
+    cx: "10", cy: "10", r: "2.5", stroke: "#6B6259", strokeWidth: "1.5"
+  }), /*#__PURE__*/React.createElement("path", {
+    d: "M10 2v2M10 16v2M2 10h2M16 10h2M4.22 4.22l1.42 1.42M14.36 14.36l1.42 1.42M4.22 15.78l1.42-1.42M14.36 5.64l1.42-1.42",
+    stroke: "#6B6259", strokeWidth: "1.5", strokeLinecap: "round"
   }))))), /*#__PURE__*/React.createElement("div", {
     style: S.weekStrip
   }, last7.map(d => {
